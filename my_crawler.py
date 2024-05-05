@@ -1,8 +1,14 @@
 import requests
 from bs4 import BeautifulSoup
-import sys, re
+import re
 
-def visit_onion(onion_url):
+current_urls = {}
+later_urls = {}
+visited_urls = {}
+
+def visit_onion(onion_url, referer):
+    global later_urls
+
     proxies = {
         "http" : "socks5h://127.0.0.1:9050",
         "https" : "socks5h://127.0.0.1:9050"
@@ -45,25 +51,50 @@ def visit_onion(onion_url):
 
         child_domain = []
         for a_tag in soup.find_all('a'):
-            child_domain.append(a_tag.get('href'))
-
+            url_text = a_tag.get('href')
+            if url_text is not None and url_text.startswith('http'):
+                child_domain.append(url_text)
         row = {
-            'origin_url': onion_url,
-            'parameter': parameter,
-            'title': title,
-            'url': url_buffer,
-            'domain': domain,
-            "HTML": response.content,
+            "name": "TEST",
+            "origin_url": onion_url,
+            "parameter": parameter,
+            "title": title,
+            "url": url_buffer,
+            "domain": domain,
+            "HTML": response.text,
             "wordlist": words,
-            "isCrawling": True
+            "referer": referer
         }
-        response = requests.post("http://uskawjdu.iptime.org:8001/postData", data=row)
+        response = requests.post("http://uskawjdu.iptime.org:8001/postData", json=row)
         print(response.status_code)
-        # print(child_domain)
+        
+        later_urls[onion_url] = child_domain
     else:
         print(onion_url, response.status_code, response.headers)
     return True
     
-tmp_list = []
-onion_url = sys.argv[1]
-visit_onion(onion_url)
+
+def repeat(depth):
+    global current_urls
+    global later_urls
+    global visited_urls
+
+    for _ in range(depth):
+        current_urls = later_urls
+        later_urls = {}
+        for referer, urls in current_urls.items():
+            for url in urls:
+                if url in visited_urls:
+                    continue
+                else:
+                    visited_urls[url] = True
+                    print("Crawling", url)
+                    visit_onion(url, referer)
+        
+
+
+# test_url = 'http://1guy2biketrips.michaelahgu3sqef5yz3u242nok2uczduq5oxqfkwq646tvjhdnl35id.onion/'
+response = requests.get("http://uskawjdu.iptime.org:8001/getUrl?name=TEST")
+data = response.json()
+later_urls[""] = [data['url']]
+repeat(data['Depth'])
